@@ -1,24 +1,31 @@
-# Xiaomi Bootloader Unlock Helper – Cross-Platform GUI and CLI
+# Xiaomi Bootloader Unlock Quota Helper – Cross-Platform GUI and CLI
 
 [![Stars](https://img.shields.io/github/stars/haseebno1/xiaomi-unlock-helper?style=flat)](https://github.com/haseebno1/xiaomi-unlock-helper/stargazers)
 [![License](https://img.shields.io/github/license/haseebno1/xiaomi-unlock-helper)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Interface](https://img.shields.io/badge/interface-GUI%20%2B%20CLI-green)
 
-**Cross-platform GUI and CLI** helper for unlocking the bootloader on
-**Xiaomi, Redmi and POCO** phones running **HyperOS or MIUI**. Use the
-graphical app if you want simplicity, or the command line for scripting and
-headless setups. It helps fix:
+A **cross-platform GUI and CLI** helper for the official Xiaomi bootloader
+unlock request on **Xiaomi, Redmi and POCO** phones (HyperOS / MIUI). It
+manages your Xiaomi Community accounts, checks tokens, syncs to Beijing time,
+and sends your request at the moment the daily quota resets (00:00 Beijing).
 
+Helps with:
 - "Quota limit reached" in the Xiaomi Community app
 - "Couldn't unlock. Try again after X days"
 - "Apply for unlocking permission" failing or timing out
-- Mi Unlock Tool stuck at 99% / "Couldn't verify device"
+
+![Xiaomi Bootloader Unlock Quota Helper dashboard showing Beijing-time countdown, account status and run settings](docs/dashboard.png)
 
 ## Features
-- **Cross-platform:** runs on Windows, Linux and macOS
-- **GUI mode:** point-and-click interface, no terminal knowledge needed
-- **CLI mode:** scriptable, works over SSH and on servers
+- **Dashboard:** live countdown to Beijing midnight, overview of accounts, ready, approved and needs-attention
+- **Account manager:** add multiple accounts, including Firefox sessions and imported Chrome sessions
+- **Token checker:** verify tokens before the run so you don't waste your window
+- **Timing monitor:** Beijing clock sync and per-account latency offset measurement
+- **Configurable run settings:** retry interval (ms), retry duration (s), 1–6 parallel senders per account
+- **Options:** optionally send for blocked or new accounts
+- **GUI and CLI:** point-and-click app, or scriptable command line
+- **Cross-platform:** Windows, Linux, macOS
 
 ## Install
 
