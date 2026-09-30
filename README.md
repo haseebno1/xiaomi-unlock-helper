@@ -1,23 +1,24 @@
-# Xiaomi Bootloader Unlock Quota Helper
+# Xiaomi Bootloader Unlock Helper – Cross-Platform GUI and CLI
 
-A small open-source tool that manages your Xiaomi community accounts, checks whether their tokens work, measures network delay, and sends the unlock-permission request at **Beijing midnight (00:00 UTC+8)** using NTP-synced timing.
+[![Stars](https://img.shields.io/github/stars/haseebno1/xiaomi-unlock-helper?style=flat)](https://github.com/haseebno1/xiaomi-unlock-helper/stargazers)
+[![License](https://img.shields.io/github/license/haseebno1/xiaomi-unlock-helper)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
+![Interface](https://img.shields.io/badge/interface-GUI%20%2B%20CLI-green)
 
-It comes in two forms that share the same engine (`core.py`) and the same `config.json`:
+**Cross-platform GUI and CLI** helper for unlocking the bootloader on
+**Xiaomi, Redmi and POCO** phones running **HyperOS or MIUI**. Use the
+graphical app if you want simplicity, or the command line for scripting and
+headless setups. It helps fix:
 
-| | File | Runs on |
-|---|---|---|
-| **GUI** (responsive window) | `xiaomi_quota_helper.py` | Windows, macOS, Linux |
-| **CLI** (no window) | `xiaomi_quota_cli.py` | Windows, macOS, Linux, **Android via Termux**, servers/VPS |
-
-> **Disclaimer.** This is an unofficial tool, not affiliated with Xiaomi. It uses undocumented endpoints that can change at any time, and automated requests may be against Xiaomi's terms. You use it at your own risk. Your token gives full access to your Xiaomi community account: never share it or commit it. This tool only requests *permission*; it does not unlock anything by itself.
+- "Quota limit reached" in the Xiaomi Community app
+- "Couldn't unlock. Try again after X days"
+- "Apply for unlocking permission" failing or timing out
+- Mi Unlock Tool stuck at 99% / "Couldn't verify device"
 
 ## Features
-- Multiple accounts with per-account millisecond offsets and on/off switches
-- Token checker and one-click offset measurement (median round-trip / 2)
-- NTP sync from 7 servers, automatic re-sync 15 min and 1 min before the target
-- Parallel senders per account, retry interval and time window
-- Dashboard with countdown, status tiles and activity log (GUI)
-- Import from `token.txt`, Firefox cookies or a Chrome login (GUI)
+- **Cross-platform:** runs on Windows, Linux and macOS
+- **GUI mode:** point-and-click interface, no terminal knowledge needed
+- **CLI mode:** scriptable, works over SSH and on servers
 
 ## Install
 
