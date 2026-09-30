@@ -1,0 +1,3 @@
+android/core.py
+android/.buildozer/
+android/bin/
