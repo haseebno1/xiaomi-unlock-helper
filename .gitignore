@@ -1,0 +1,7 @@
+config.json
+token.txt
+timeshift.txt
+__pycache__/
+*.pyc
+venv/
+.venv/

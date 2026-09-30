@@ -1,0 +1,6 @@
+{
+  "accounts": [
+    {"id": "1", "name": "Main", "token": "PASTE_new_bbs_serviceToken_HERE", "offset_ms": 66, "enabled": true}
+  ],
+  "settings": {"allow_blocked": false, "interval_ms": 100, "window_s": 30, "senders": 2}
+}

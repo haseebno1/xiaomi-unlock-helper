@@ -1,0 +1,2 @@
+browser-cookie3   # GUI: "Read Firefox cookie" import
+selenium          # GUI: "Log in with Chrome" import
