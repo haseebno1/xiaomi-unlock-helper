@@ -15,7 +15,7 @@ Helps with:
 - "Couldn't unlock. Try again after X days"
 - "Apply for unlocking permission" failing or timing out
 
-![Xiaomi Bootloader Unlock Quota Helper dashboard showing Beijing-time countdown, account status and run settings](docs/dashboard.png)
+![Xiaomi Bootloader Unlock Quota Helper dashboard showing Beijing-time countdown, account status and run settings](/dashboard.png)
 
 ## Features
 - **Dashboard:** live countdown to Beijing midnight, overview of accounts, ready, approved and needs-attention
