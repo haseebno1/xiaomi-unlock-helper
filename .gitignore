@@ -5,3 +5,7 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+android/core.py
+android/.buildozer/
+android/bin/

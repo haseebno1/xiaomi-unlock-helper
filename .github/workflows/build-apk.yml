@@ -1,0 +1,41 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    paths: ["android/**", "core.py", ".github/workflows/build-apk.yml"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            android/.buildozer
+          key: buildozer-${{ hashFiles('android/buildozer.spec') }}
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip unzip openjdk-17-jdk autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
+      - name: Install buildozer
+        run: pip install buildozer "cython<3"
+      - name: Build debug APK
+        run: |
+          cp core.py android/core.py
+          cd android && buildozer -v android debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiaomi-quota-helper-apk
+          path: android/bin/*.apk
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/bin/*.apk
