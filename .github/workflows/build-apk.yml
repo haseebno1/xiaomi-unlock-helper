@@ -23,13 +23,29 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y zip unzip openjdk-17-jdk autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+            build-essential git ccache
       - name: Install buildozer
-        run: pip install buildozer "cython<3"
+        run: pip install buildozer "cython<3" virtualenv
       - name: Build debug APK
         run: |
+          set -o pipefail
           cp core.py android/core.py
-          cd android && buildozer -v android debug
+          cd android
+          buildozer -v android debug 2>&1 | tee ../build.log
+      - name: Show error summary
+        if: failure()
+        run: |
+          echo "===== lines mentioning errors ====="
+          grep -n -i -E "error|failed|traceback|fatal|cannot|not found|no such" build.log | grep -v "Error code: 1" | head -60 || true
+          echo "===== last 80 lines ====="
+          tail -n 80 build.log
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
       - uses: actions/upload-artifact@v4
         with:
           name: xiaomi-quota-helper-apk
