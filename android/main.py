@@ -289,10 +289,14 @@ def open_battery_settings():
 
 
 # ---------------- App ----------------
-KV = """
-<MDTabsContent@MDScrollView+MDTabsBase>:
-    bar_width: 0
+class TabPage(MDScrollView, MDTabsBase):
+    """Scrollable content container for one MDTabs page. Must be defined in
+    Python: the KV '<X@A+B>' mixin syntax needs both names in the Kivy Factory,
+    and MDTabsBase is a plain mixin, not a Factory-registered widget."""
+    pass
 
+
+KV = """
 MDBoxLayout:
     orientation: "vertical"
     md_bg_color: app.theme_cls.bg_normal
@@ -309,16 +313,16 @@ MDBoxLayout:
         anim_duration: 120
         background_color: app.theme_cls.bg_normal
 
-        MDTabsContent:
+        TabPage:
             title: "Home"
 
-        MDTabsContent:
+        TabPage:
             title: "Accounts"
 
-        MDTabsContent:
+        TabPage:
             title: "Log"
 
-        MDTabsContent:
+        TabPage:
             title: "About"
 """
 
@@ -407,7 +411,7 @@ class QuotaApp(MDApp):
         self.theme_cls.fbind("theme_style", self._apply_theme)
 
         # Must exist before KV is parsed (the app bar references it).
-        self.bar_actions = [["theme-light-dark", self.flip_theme], ["cog", self.show_settings]]
+        self.bar_actions = [["theme-light-dark", self.flip_theme], ["cog", lambda *a: self.show_settings()]]
         self.running, self.phase, self.target, self.clock = False, "Idle", None, Ntp()
         self.stop_ev, self.lines, self.status_icons = threading.Event(), [], {}
 
@@ -533,7 +537,8 @@ class QuotaApp(MDApp):
                               theme_icon_color="Custom", icon_color=color)
             self.status_icons[a["id"]] = ic
 
-            sw = MDSwitch(active=a.get("enabled", True), size_hint=(None, None), size=(dp(36), dp(28)))
+            sw = MDSwitch()
+            sw.active = bool(a.get("enabled", True))  # set after init: ids.thumb only exists once the KV rule is applied
             sw.bind(active=lambda _w, v, a=a: self._set_enabled(a, v))
             top = MDBoxLayout(size_hint_y=None, height=dp(36), spacing=dp(8))
             top.add_widget(sw)
@@ -728,7 +733,8 @@ class QuotaApp(MDApp):
         """Dark-theme switch, from the top app bar gear icon."""
         box = MDBoxLayout(orientation="vertical", adaptive_height=True, spacing=dp(8), padding=dp(4))
         row = MDBoxLayout(size_hint_y=None, height=dp(40), spacing=dp(12))
-        sw = MDSwitch(active=self.theme_cls.theme_style == "Dark", size_hint=(None, None), size=(dp(36), dp(28)))
+        sw = MDSwitch()
+        sw.active = self.theme_cls.theme_style == "Dark"  # set after init: ids.thumb only exists once the KV rule is applied
         sw.bind(active=lambda _w, v: self.set_theme("Dark" if v else "Light"))
         row.add_widget(sw)
         row.add_widget(MDLabel(text="Dark theme", font_style="Body1", adaptive_height=True))
