@@ -1,5 +1,5 @@
 """Xiaomi Bootloader Unlock Quota Helper - Android (Kivy) app. Reuses core.py (copied in at build time)."""
-import json, os, random, statistics, threading, time
+import json, os, random, re, statistics, sys, threading, time
 from datetime import datetime
 
 from kivy.app import App
@@ -18,12 +18,13 @@ from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
 from kivy.uix.textinput import TextInput
 from kivy.utils import get_color_from_hex as hexc, platform
 
-from core import BJ, DEFAULT_SETTINGS, STATE_TEXT, Api, Clock as Ntp, fmt_bj, mask, next_midnight_epoch
+from core import (APPLY_URL, AUTHOR_GITHUB, AUTHOR_NAME, AUTHOR_URL, BJ, DEFAULT_SETTINGS, NTP_SERVERS, STATE_TEXT,
+                  STATUS_URL, Api, Clock as Ntp, fmt_bj, mask, next_midnight_epoch)
 
 ANDROID = platform == "android"
 if ANDROID:
     from android.runnable import run_on_ui_thread
-    from jnius import PythonJavaClass, autoclass, java_method
+    from jnius import PythonJavaClass, autoclass, cast, java_method
     PA = autoclass("org.kivy.android.PythonActivity")
 else:
     run_on_ui_thread = lambda f: f
@@ -31,6 +32,45 @@ else:
 BG, CARD, TEXT, MUTED, ACCENT, TIME = "#0b0e1a", "#182038", "#e8ebf7", "#8088a6", "#7b8cff", "#ffb454"
 OK, WARN, BAD = "#5ee6a8", "#ffb454", "#ff6b81"
 LOGIN_URL = "https://new.c.mi.com/global"
+
+
+
+def extract_token(text):
+    """Find a new_bbs_serviceToken in whatever the user copied: a bare value, 'name=value', or Cookie-Editor JSON."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+        items = data if isinstance(data, list) else [data]
+        for it in items:
+            if isinstance(it, dict) and it.get("name") == "new_bbs_serviceToken" and it.get("value"):
+                return str(it["value"]).strip()
+    except ValueError:
+        pass
+    m = re.search(r"new_bbs_serviceToken[\"']?\s*[=:]\s*[\"']?([^;\"'\s,}]+)", text)
+    if m:
+        return m.group(1)
+    if len(text) >= 20 and not re.search(r"[\s{}\[\]]", text):
+        return text.strip('"')
+    return None
+
+
+def open_url(url, chooser=True):
+    """Open a link in an external browser (lets the user pick Firefox / Kiwi)."""
+    try:
+        if ANDROID:
+            Intent, Uri, JString = autoclass("android.content.Intent"), autoclass("android.net.Uri"), autoclass("java.lang.String")
+            intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            if chooser:
+                intent = Intent.createChooser(intent, cast("java.lang.CharSequence", JString("Open login page with")))
+            PA.mActivity.startActivity(intent)
+        else:
+            import webbrowser
+            webbrowser.open(url)
+        return True
+    except Exception:
+        return False
 
 
 def kind_color(text):
@@ -86,53 +126,88 @@ if ANDROID:
 
 
 class WebLogin:
-    """Shows a WebView over the app. After logging in, reads new_bbs_serviceToken from Android's cookie store
-    (this includes HttpOnly cookies, so nothing needs to be copied by hand)."""
+    """In-app browser. Shows a WebView over the app; after logging in, reads new_bbs_serviceToken from Android's
+    cookie store (HttpOnly cookies included). Every step reports problems through on_error instead of failing silently."""
+    UA = ("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) "
+          "Chrome/124.0.0.0 Mobile Safari/537.36")
 
-    def __init__(self, on_token):
-        self.on_token, self.layout, self.wv = on_token, None, None
+    def __init__(self, on_token, on_error):
+        self.on_token, self.on_error, self.layout, self.wv = on_token, on_error, None, None
+        self._clicks = []
 
     @run_on_ui_thread
     def open(self):
-        act = PA.mActivity
-        WebView, WVC = autoclass("android.webkit.WebView"), autoclass("android.webkit.WebViewClient")
-        CM, LL = autoclass("android.webkit.CookieManager"), autoclass("android.widget.LinearLayout")
-        Button_, VLP = autoclass("android.widget.Button"), autoclass("android.view.ViewGroup$LayoutParams")
-        LLP = autoclass("android.widget.LinearLayout$LayoutParams")
-        self.wv = WebView(act)
-        s = self.wv.getSettings()
-        s.setJavaScriptEnabled(True)
-        s.setDomStorageEnabled(True)
-        self.wv.setWebViewClient(WVC())
+        try:
+            act = PA.mActivity
+            WebView, WVC = autoclass("android.webkit.WebView"), autoclass("android.webkit.WebViewClient")
+            CM, LL = autoclass("android.webkit.CookieManager"), autoclass("android.widget.LinearLayout")
+            Button_, VLP = autoclass("android.widget.Button"), autoclass("android.view.ViewGroup$LayoutParams")
+            LLP = autoclass("android.widget.LinearLayout$LayoutParams")
+            self.wv = WebView(act)
+            st = self.wv.getSettings()
+            st.setJavaScriptEnabled(True)
+            st.setDomStorageEnabled(True)
+            st.setUserAgentString(self.UA)
+            self.wv.setWebViewClient(WVC())
+            cm = CM.getInstance()
+            cm.setAcceptCookie(True)
+            cm.setAcceptThirdPartyCookies(self.wv, True)
+            self.wv.loadUrl(LOGIN_URL)
+
+            bar = LL(act)
+            bar.setOrientation(0)
+            for text, cb in (("Get token", self.finish), ("Close", self.close)):
+                b = Button_(act)
+                b.setText(text)
+                click = _Click(cb)
+                self._clicks.append(click)  # keep a reference so Java can still call it
+                b.setOnClickListener(click)
+                bar.addView(b, LLP(0, -2, 1.0))
+            self.layout = LL(act)
+            self.layout.setOrientation(1)
+            self.layout.setBackgroundColor(0xFFFFFFFF)
+            self.layout.addView(bar, LLP(-1, -2))
+            self.layout.addView(self.wv, LLP(-1, 0, 1.0))
+            act.addContentView(self.layout, VLP(-1, -1))
+        except Exception as e:
+            self.layout = None
+            self.on_error(f"open: {e!r}")
+
+    def _read_token(self):
+        CM = autoclass("android.webkit.CookieManager")
         cm = CM.getInstance()
-        cm.setAcceptCookie(True)
-        cm.setAcceptThirdPartyCookies(self.wv, True)
-        self.wv.loadUrl(LOGIN_URL)
-        b = Button_(act)
-        b.setText("I'm logged in - get token")
-        self._click = _Click(self.finish)
-        b.setOnClickListener(self._click)
-        self.layout = LL(act)
-        self.layout.setOrientation(1)
-        self.layout.setBackgroundColor(0xFF000000)
-        self.layout.addView(b, LLP(-1, -2))
-        self.layout.addView(self.wv, LLP(-1, 0, 1.0))
-        act.addContentView(self.layout, VLP(-1, -1))
+        for url in (LOGIN_URL, "https://new.c.mi.com", "https://c.mi.com", "https://mi.com",
+                    "https://sgp-api.buy.mi.com"):
+            for part in (cm.getCookie(url) or "").split(";"):
+                k, _, v = part.strip().partition("=")
+                if k == "new_bbs_serviceToken" and v:
+                    return v.strip('"')
+        return None
 
     @run_on_ui_thread
     def finish(self):
-        CM = autoclass("android.webkit.CookieManager")
-        token = None
-        for url in (LOGIN_URL, "https://new.c.mi.com", "https://c.mi.com"):
-            for part in (CM.getInstance().getCookie(url) or "").split(";"):
-                k, _, v = part.strip().partition("=")
-                if k == "new_bbs_serviceToken" and v:
-                    token = v.strip('"')
-            if token:
-                break
-        self.layout.getParent().removeView(self.layout)
-        self.wv.destroy()
-        self.on_token(token)
+        try:
+            token = self._read_token()
+        except Exception as e:
+            return self.on_error(f"read cookie: {e!r}")
+        if token:
+            self._remove()
+            self.on_token(token)
+        else:
+            self.on_error("no token yet - finish logging in on the page first, then tap 'Get token' again")
+
+    @run_on_ui_thread
+    def close(self):
+        self._remove()
+
+    def _remove(self):
+        try:
+            if self.layout is not None:
+                self.layout.getParent().removeView(self.layout)
+                self.wv.destroy()
+        except Exception as e:
+            self.on_error(f"close: {e!r}")
+        self.layout = None
 
 
 @run_on_ui_thread
@@ -170,6 +245,8 @@ class QuotaApp(App):
 
     def build(self):
         Window.clearcolor = hexc(BG)
+        Window.bind(on_keyboard=self._on_key)
+        self.web = None
         self.cfg_path = os.path.join(self.user_data_dir, "config.json")
         self.data = {"accounts": [], "settings": dict(DEFAULT_SETTINGS)}
         if os.path.exists(self.cfg_path):
@@ -185,16 +262,24 @@ class QuotaApp(App):
         self.running, self.phase, self.target, self.clock = False, "Idle", None, Ntp()
         self.stop_ev, self.lines, self.status_lbls = threading.Event(), [], {}
 
-        tp = TabbedPanel(do_default_tab=False, tab_width=dp(110), background_color=hexc(BG))
-        for name, builder in (("Dashboard", self.build_dash), ("Accounts", self.build_accounts), ("Log", self.build_log)):
+        tp = TabbedPanel(do_default_tab=False, tab_width=dp(88), background_color=hexc(BG))
+        for name, builder in (("Dashboard", self.build_dash), ("Accounts", self.build_accounts), ("Log", self.build_log),
+                              ("Developer", self.build_dev)):
             item = TabbedPanelItem(text=name)
             item.add_widget(builder())
+            item.bind(on_release=lambda *_: self.update_dev())
             tp.add_widget(item)
         tp.default_tab = tp.tab_list[-1]
         KClock.schedule_interval(self.tick, 0.1)
         self.refresh()
         self.log("Welcome. Add an account (Accounts tab), check its token, then press Start.")
         return tp
+
+    def _on_key(self, _w, key, *_a):
+        if key == 27 and self.web is not None and self.web.layout is not None:
+            self.web.close()
+            return True
+        return False
 
     def on_pause(self):
         return True  # keep running in the background
@@ -257,9 +342,14 @@ class QuotaApp(App):
     # ---- accounts ----
     def build_accounts(self):
         root = BoxLayout(orientation="vertical", padding=dp(6), spacing=dp(6))
-        bar = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
-        bar.add_widget(btn("Add account", self.add_dialog, primary=True))
-        bar.add_widget(btn("Log in (browser)", self.web_login))
+        bar = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(94), spacing=dp(6))
+        r1, r2 = BoxLayout(spacing=dp(6)), BoxLayout(spacing=dp(6))
+        r1.add_widget(btn("Add account", self.add_dialog, primary=True))
+        r1.add_widget(btn("Log in (in-app)", self.web_login))
+        r2.add_widget(btn("Firefox / Kiwi", self.token_help))
+        r2.add_widget(btn("Paste token", self.paste_token))
+        bar.add_widget(r1)
+        bar.add_widget(r2)
         root.add_widget(bar)
         sv, self.acc_col = scroll_col(8)
         root.add_widget(sv)
@@ -314,12 +404,12 @@ class QuotaApp(App):
         name, tok, off = field("Account", "Name"), field(token, "new_bbs_serviceToken"), field("0", "Offset ms", input_filter="float")
         for w in (name, tok):
             body.add_widget(w)
-        body.add_widget(btn("Paste token from clipboard", lambda: setattr(tok, "text", (Clipboard.paste() or "").strip())))
+        body.add_widget(btn("Paste token from clipboard", lambda: setattr(tok, "text", extract_token(Clipboard.paste()) or (Clipboard.paste() or "").strip())))
         body.add_widget(off)
         pop = Popup(title="Add account", content=body, size_hint=(0.94, None), height=dp(400))
 
         def save():
-            t = tok.text.strip().strip('"')
+            t = extract_token(tok.text) or tok.text.strip().strip('"')
             if t:
                 self.add_account(name.text.strip() or "Account", t, float(off.text or 0))
             pop.dismiss()
@@ -340,15 +430,90 @@ class QuotaApp(App):
 
     def web_login(self):
         if not ANDROID:
-            return self.log("[!] Browser login only works on Android. Use 'Add account' and paste the token.")
-        WebLogin(self._got_token).open()
+            return self.log("[!] The in-app browser only works on Android. Use 'Paste token' instead.")
+        self.log("Opening in-app browser... log in, then tap 'Get token' at the top.")
+        self.web = WebLogin(self._got_token, self._web_error)
+        self.web.open()
+
+    @mainthread
+    def _web_error(self, msg):
+        self.log(f"[!] In-app browser: {msg}")
+        self.log("Tip: use 'Firefox / Kiwi' (Cookie-Editor) and then 'Paste token'.")
 
     @mainthread
     def _got_token(self, token):
-        if token:
-            self.add_account(f"Account {len(self.data['accounts']) + 1}", token, 66.0)
-        else:
-            self.log("[!] Token not found. Make sure you are fully logged in, then try again.")
+        self.add_account(f"Account {len(self.data['accounts']) + 1}", token, 66.0)
+
+    def paste_token(self):
+        token = extract_token(Clipboard.paste())
+        if not token:
+            return self.log("[!] No token in the clipboard. In Cookie-Editor, copy the value of new_bbs_serviceToken "
+                            "(or the exported cookie text), then tap 'Paste token'.")
+        self.add_account(f"Account {len(self.data['accounts']) + 1}", token, 66.0)
+
+    def token_help(self):
+        body = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+        steps = ("1. Install Firefox (or Kiwi Browser) and add the 'Cookie-Editor' extension.\n\n"
+                 "2. Tap 'Open login page', choose Firefox or Kiwi, and sign in to the Xiaomi Community.\n\n"
+                 "3. Open Cookie-Editor, tap the cookie new_bbs_serviceToken and copy its value "
+                 "(Export also works).\n\n"
+                 "4. Come back here and tap 'Paste token'.")
+        label = Label(text=steps, font_size=dp(13), color=hexc(TEXT), halign="left", valign="top")
+        label.bind(size=lambda i, v: setattr(i, "text_size", v))
+        body.add_widget(label)
+        pop = Popup(title="Get the token with Firefox / Kiwi", content=body, size_hint=(0.94, None), height=dp(470))
+        body.add_widget(btn("Open login page", lambda: open_url(LOGIN_URL), primary=True))
+        body.add_widget(btn("Paste token", lambda: (pop.dismiss(), self.paste_token())))
+        body.add_widget(btn("Close", pop.dismiss))
+        pop.open()
+
+    # ---- developer ----
+    def build_dev(self):
+        root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+        root.add_widget(lbl("Developer", 22, TEXT, size_hint_y=None, height=dp(34), halign="left", bold=True))
+        root.add_widget(lbl(f"Author   : {AUTHOR_NAME}\nGitHub   : {AUTHOR_GITHUB}", 14, MUTED, size_hint_y=None,
+                            height=dp(48), halign="left"))
+        for w in root.children:
+            w.bind(size=lambda i, v: setattr(i, "text_size", (v[0], None)))
+        row = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        row.add_widget(btn("Open GitHub", lambda: open_url(AUTHOR_URL, chooser=False), primary=True))
+        row.add_widget(btn("Copy diagnostics", self.copy_dev))
+        root.add_widget(row)
+        sv = ScrollView()
+        self.dev_lbl = Label(text="", font_name="RobotoMono-Regular", font_size=dp(11), color=hexc(TEXT),
+                             size_hint_y=None, halign="left", valign="top")
+        self.dev_lbl.bind(width=lambda i, w: setattr(i, "text_size", (w - dp(8), None)),
+                          texture_size=lambda i, v: setattr(i, "height", v[1] + dp(12)))
+        sv.add_widget(self.dev_lbl)
+        root.add_widget(sv)
+        return root
+
+    def dev_text(self):
+        try:
+            Build, VER = autoclass("android.os.Build"), autoclass("android.os.Build$VERSION")
+            android = f"{VER.RELEASE} (API {VER.SDK_INT})"
+            device = f"{Build.MANUFACTURER} {Build.MODEL}"
+        except Exception:
+            android = device = "n/a (not running on Android)"
+        accs = self.data["accounts"]
+        return "\n".join([
+            "APPLICATION", "  Xiaomi Bootloader Unlock Quota Helper (Android)", "  Version     : 1.0.0",
+            f"  Author      : {AUTHOR_NAME}", f"  GitHub      : {AUTHOR_GITHUB}", "",
+            "RUNTIME", f"  Python      : {sys.version.split()[0]}", f"  Android     : {android}",
+            f"  Device      : {device}", "",
+            "APP STATE", f"  Accounts    : {len(accs)} ({sum(1 for a in accs if a.get('enabled', True))} enabled)",
+            f"  Clock synced: {self.clock.synced}", f"  Clock offset: {self.clock.offset * 1000:+.1f} ms", "",
+            "NETWORK", f"  Status API  : {STATUS_URL}", f"  Apply API   : {APPLY_URL}",
+            "  Timezone    : Beijing / UTC+08:00", "",
+            "NTP SERVERS", *[f"  - {x}" for x in NTP_SERVERS]])
+
+    def update_dev(self):
+        if getattr(self, "dev_lbl", None) is not None:
+            self.dev_lbl.text = self.dev_text()
+
+    def copy_dev(self):
+        Clipboard.copy(self.dev_text())
+        self.log("Developer diagnostics copied to the clipboard.")
 
     # ---- log ----
     def build_log(self):
@@ -441,6 +606,7 @@ class QuotaApp(App):
     @mainthread
     def _finished(self):
         self.running, self.phase = False, "Idle"
+        self.update_dev()
         self.b_run.text = "Start"
         keep_screen_on(False)
         wake_lock(False)
