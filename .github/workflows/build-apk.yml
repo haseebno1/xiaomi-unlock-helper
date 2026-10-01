@@ -18,12 +18,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: actions/cache@v4
+      # Restore the toolchain cache. It is saved at the end of the job (even on failure),
+      # so a failed build does not force a full 20-30 minute recompile next time.
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.buildozer
             android/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}-${{ github.run_id }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}-
 
       - name: System packages
         run: |
@@ -58,12 +63,12 @@ jobs:
       - name: Show error summary
         if: failure()
         run: |
-          echo "===== real errors (compiler flags and DEBUG noise removed) ====="
-          grep -n -E "\[ERROR\]|Traceback|CalledProcessError|Command failed|FAILED|fatal error|error:|ModuleNotFound|No matching distribution|Could not find" build.log \
-            | grep -v -E "Werror|\[DEBUG\]" | cut -c1-300 | head -40 || true
-          echo "===== 60 lines before the failure (trimmed) ====="
-          n=$(grep -n "Command failed" build.log | head -1 | cut -d: -f1); n=${n:-$(wc -l < build.log)}
-          start=$((n>60 ? n-60 : 1)); sed -n "${start},${n}p" build.log | cut -c1-250
+          grep -v -E "^export |^# +[A-Za-z_0-9]+ = " build.log | cut -c1-250 > clean.log
+          echo "===== Gradle errors ====="
+          grep -n -E "FAILURE: Build failed|What went wrong|Execution failed|Could not|licen[sc]e|Unsupported|incompatible|Failed to install|AAPT|SDK location" clean.log | head -30 || true
+          echo "===== 80 lines before 'gradlew failed' ====="
+          n=$(grep -n "gradlew failed" clean.log | head -1 | cut -d: -f1); n=${n:-$(wc -l < clean.log)}
+          start=$((n>80 ? n-80 : 1)); sed -n "${start},$((n+3))p" clean.log
 
       - name: Upload build log (on failure)
         if: failure()
@@ -82,3 +87,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: android/bin/*.apk
+
+      # Keep this as the LAST step: saves the toolchain cache whether the build passed or failed.
+      - name: Save build cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            android/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}-${{ github.run_id }}
