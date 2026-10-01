@@ -58,10 +58,12 @@ jobs:
       - name: Show error summary
         if: failure()
         run: |
-          echo "===== lines mentioning errors ====="
-          grep -n -i -E "error|failed|traceback|fatal|cannot|not found|no such" build.log | grep -v "Error code: 1" | head -60 || true
-          echo "===== last 80 lines ====="
-          tail -n 80 build.log
+          echo "===== real errors (compiler flags and DEBUG noise removed) ====="
+          grep -n -E "\[ERROR\]|Traceback|CalledProcessError|Command failed|FAILED|fatal error|error:|ModuleNotFound|No matching distribution|Could not find" build.log \
+            | grep -v -E "Werror|\[DEBUG\]" | cut -c1-300 | head -40 || true
+          echo "===== 60 lines before the failure (trimmed) ====="
+          n=$(grep -n "Command failed" build.log | head -1 | cut -d: -f1); n=${n:-$(wc -l < build.log)}
+          start=$((n>60 ? n-60 : 1)); sed -n "${start},${n}p" build.log | cut -c1-250
 
       - name: Upload build log (on failure)
         if: failure()
