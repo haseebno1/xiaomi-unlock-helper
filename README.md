@@ -142,7 +142,7 @@ python xiaomi_quota_cli.py enable all | disable Main | remove Main
 
 ## Android app (APK)
 
-A native Android app (built with Kivy) reuses the same `core.py` engine. It has **Dashboard**, **Accounts** and **Log** tabs, plus **Log in (browser)**: an in-app web login that reads your token straight from Android's cookie store, so you never copy cookies by hand.
+A native Android app (built with Kivy + KivyMD) reuses the same `core.py` engine. It uses **Material Design 3** widgets with a light/dark theme toggle (top-right gear icon), and has **Home**, **Accounts**, **Log** and **About** tabs, plus **Log in (in-app browser)**: an in-app web login that reads your token straight from Android's cookie store and captures it automatically, so you never copy cookies by hand.
 
 > The Android app is new and has had limited testing. If something breaks, please open an issue and include the contents of the app's Log tab.
 

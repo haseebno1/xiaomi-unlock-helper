@@ -5,7 +5,7 @@ package.domain = io.github.haseebno1
 source.dir = .
 source.include_exts = py
 version = 1.0.0
-requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,urllib3,ntplib,pyjnius,android
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,kivymd==1.2.0,urllib3,ntplib,pyjnius,android
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,WAKE_LOCK
