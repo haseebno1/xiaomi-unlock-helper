@@ -18,6 +18,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Android Gradle plugin needs Java 17; the runner defaults to Java 11.
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       # Restore the toolchain cache. It is saved at the end of the job (even on failure),
       # so a failed build does not force a full 20-30 minute recompile next time.
       - name: Restore build cache
@@ -56,6 +63,8 @@ jobs:
       - name: Build debug APK
         run: |
           set -o pipefail
+          java -version 2>&1 | head -1
+          echo "JAVA_HOME=$JAVA_HOME"
           cp core.py android/core.py
           cd android
           buildozer -v android debug 2>&1 | tee ../build.log
