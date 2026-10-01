@@ -1,3 +1,12 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    paths: ["android/**", "core.py", ".github/workflows/build-apk.yml"]
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -45,3 +54,29 @@ jobs:
           cp core.py android/core.py
           cd android
           buildozer -v android debug 2>&1 | tee ../build.log
+
+      - name: Show error summary
+        if: failure()
+        run: |
+          echo "===== lines mentioning errors ====="
+          grep -n -i -E "error|failed|traceback|fatal|cannot|not found|no such" build.log | grep -v "Error code: 1" | head -60 || true
+          echo "===== last 80 lines ====="
+          tail -n 80 build.log
+
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiaomi-quota-helper-apk
+          path: android/bin/*.apk
+
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/bin/*.apk
