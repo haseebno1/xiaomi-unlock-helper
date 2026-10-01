@@ -44,7 +44,7 @@ Per platform:
 - **Windows:** install Python from python.org (tick *Add to PATH*). Nothing else needed.
 - **macOS:** use Python from python.org or `brew install python-tk`. Apple's built-in Python has an outdated Tk.
 - **Linux:** install Tk first: `sudo apt install python3-tk` (Debian/Ubuntu) or `sudo dnf install python3-tkinter` (Fedora).
-- **Android (Termux):** GUI is not supported, use the CLI:
+- **Android:** use the APK (see "Android app (APK)" below), or the CLI in Termux:
   ```bash
   pkg install python git
   git clone https://github.com/haseebno1/xiaomi-unlock-helper.git && cd xiaomi-unlock-helper
