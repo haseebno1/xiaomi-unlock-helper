@@ -1,57 +1,47 @@
-name: Build Android APK
-on:
-  workflow_dispatch:
-  push:
-    tags: ["v*"]
-    paths: ["android/**", "core.py", ".github/workflows/build-apk.yml"]
-permissions:
-  contents: write
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with:
+          python-version: "3.11"
+
       - uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             android/.buildozer
-          key: buildozer-${{ hashFiles('android/buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}
+
       - name: System packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+          sudo apt-get install -y \
+            zip unzip openjdk-17-jdk \
+            autoconf automake libtool libtool-bin \
+            pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 \
+            cmake libffi-dev libssl-dev \
             build-essential git ccache
-      - name: Install buildozer
-        run: pip install buildozer "cython<3" virtualenv
+
+          # Make Libtool's Autoconf macros visible to aclocal/autoreconf.
+          echo "ACLOCAL_PATH=/usr/share/aclocal:/usr/share/aclocal-1.16" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            buildozer \
+            "python-for-android==2024.1.21" \
+            "cython<3" \
+            virtualenv
+
       - name: Build debug APK
         run: |
           set -o pipefail
           cp core.py android/core.py
           cd android
           buildozer -v android debug 2>&1 | tee ../build.log
-      - name: Show error summary
-        if: failure()
-        run: |
-          echo "===== lines mentioning errors ====="
-          grep -n -i -E "error|failed|traceback|fatal|cannot|not found|no such" build.log | grep -v "Error code: 1" | head -60 || true
-          echo "===== last 80 lines ====="
-          tail -n 80 build.log
-      - name: Upload build log (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: build.log
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xiaomi-quota-helper-apk
-          path: android/bin/*.apk
-      - name: Attach to release (tags only)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: android/bin/*.apk
